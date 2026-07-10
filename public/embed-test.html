@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Dev harness: simulates the calculator embedded in a host page (beehiiv-ish)
+     at several iframe widths. Not linked from the app; visit /embed-test.html. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Embed test harness</title>
+<style>
+  body { font-family: Georgia, serif; background: #fff; color: #222; margin: 0; padding: 32px 16px; }
+  .fake-article { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 28px; }
+  p { line-height: 1.7; max-width: 640px; }
+  .frame { border: 0; width: 100%; min-height: 1200px; display: block; margin: 24px 0; }
+  .w320 { width: 320px; }
+  .w480 { width: 480px; }
+  .label { font-size: 13px; color: #888; margin: 32px 0 4px; font-family: sans-serif; }
+</style>
+</head>
+<body>
+<div class="fake-article">
+  <h1>A fake newsletter page around the calculator</h1>
+  <p>This paragraph stands in for beehiiv content above the embed. The iframes
+     below point at the local dev server at three widths.</p>
+
+  <div class="label">Full-width iframe (desktop)</div>
+  <iframe class="frame" src="/" title="Firefighter Retirement Calculator"></iframe>
+
+  <div class="label">480px iframe</div>
+  <iframe class="frame w480" src="/" title="Firefighter Retirement Calculator (480px)"></iframe>
+
+  <div class="label">320px iframe + transparent background</div>
+  <iframe class="frame w320" src="/?bg=transparent" title="Firefighter Retirement Calculator (320px)"></iframe>
+
+  <p>And this stands in for content below the embed, to confirm the calculator
+     doesn't hijack the host page's scroll.</p>
+</div>
+</body>
+</html>
