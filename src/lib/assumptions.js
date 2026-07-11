@@ -35,4 +35,32 @@ export const ASSUMPTIONS = {
   // entered their plan's rate. Compounding (compound vs simple) is a per-run
   // choice on the DROP step; see dropAccumulation.
   dropRateDefault: 0.06,
+
+  // --- In-DROP calculator ------------------------------------------------------
+  // Rates for members already in DROP (indropEngine.js). All simple interest —
+  // this plan credits interest without compounding. Years 1-5 are fixed by the
+  // plan document.
+  inDropYear1to5Rate: 0.06,
+  // Years 6-8: "plan returns" — the board sets the rate each year, so it's
+  // modeled as a range (low/mid/high), never a point estimate; same product
+  // rule as everywhere else in this app. NOTE: DROP years 9-10 are only
+  // reachable via the 10-year self-directed conversion (built in a later
+  // step); whatever is NOT self-directed in years 9-10 currently reuses this
+  // same range. That is our assumption to verify against the actual plan
+  // document, not a stated plan rule.
+  inDropYear6to8Range: { low: 0.03, mid: 0.045, high: 0.06 },
+  // How far a user's statement balance may diverge from our computed estimate
+  // before the projection flags it for the UI ("your statement says X, our
+  // estimate says Y"). Below this, the gap is rounding/timing noise and the
+  // statement is used quietly.
+  inDropBalanceMismatchTolerance: 0.15,
+  // The two building blocks behind the self-directed option's user-chosen
+  // allocation (blended in portfolioAssumptions, indropEngine.js). The main
+  // calculator's returnMean/returnStdDev above approximates a ~70/30 mix of
+  // exactly these — the 13% stdDev IS the 70/30 blend; the 6.5% mean sits
+  // below the naive 8.35% blend on purpose (conservatism). The in-DROP
+  // self-directed option exposes the blend directly via an equity weight
+  // instead of hardcoding one mix.
+  equityReturn: { mean: 0.10, stdDev: 0.16 },
+  bondReturn: { mean: 0.045, stdDev: 0.06 },
 };

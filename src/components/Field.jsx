@@ -26,6 +26,17 @@ export function NumberInput({ value, onChange, ...rest }) {
   );
 }
 
+export function DateInput({ value, onChange, ...rest }) {
+  return (
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      {...rest}
+    />
+  );
+}
+
 // A horizontal set of pill-style radio choices (used for yes/no and toggles).
 export function Choice({ value, onChange, options, name }) {
   return (

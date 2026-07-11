@@ -89,6 +89,39 @@ no routes. After deploying:
 2. Add the production URL to Supabase Auth → URL Configuration so magic
    links redirect correctly.
 
+## Second calculator: In-DROP (`/in-drop.html`)
+
+A separate page for firefighters **already in DROP**. Their pension board
+fixed the monthly benefit at entry, so there's no accrual math — the
+calculator takes the known monthly amount (plus an optional statement
+balance as an anchor) and projects the DROP balance to exit: 6% simple
+interest for years 1–5 (plan-fixed), a low/mid/high "plan returns" range
+for years 6–8, and an optional 10-year self-directed conversion modeled
+with the same Monte Carlo machinery as the main calculator (stock/bond
+blend set by the user).
+
+Both calculators build from one repo — Vite's multi-page
+`rollupOptions.input` emits `dist/index.html` and `dist/in-drop.html`; in
+dev it's just `localhost:5173/in-drop.html`. Same embed rules, same styles.
+
+- `src/InDropApp.jsx` — step container + `calculateInDrop()` wiring
+- `src/indrop-steps/` — status, plan terms, self-directed conversion, review
+- `src/lib/indropEngine.js` — simple-interest accrual, conversion Monte
+  Carlo, and the `parseInDropForm` validation layer (hard errors + soft
+  warnings, same pattern as `engine.js`)
+- `src/components/InDropResults.jsx` — results view, same range-bar language
+
+Converting redirects the account: from the conversion date on, *every* new
+pension deposit goes into the self-directed track, not the plan track. Only
+the portion of the balance-at-conversion you explicitly leave behind stays
+on plan rates, and it gets no further deposits (confirmed 2026-07-11).
+
+**⚠️ Still verify with the pension board before this page goes live:** the
+calculator assumes DROP years 9–10 (only reachable via the self-directed
+conversion) credit the same 3–6% plan-returns range as years 6–8 for
+whatever balance wasn't self-directed. That range isn't a stated plan rule —
+it's a working assumption flagged in `src/lib/assumptions.js`.
+
 ## Where things are
 
 - `src/App.jsx` — step container, progress bar, validation gating
