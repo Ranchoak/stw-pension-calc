@@ -80,9 +80,17 @@ visit `/embed-test.html`.
 
 ## Deploying
 
-Static site — `npm run build` produces `dist/`, host it anywhere (Vercel /
-Netlify / Cloudflare Pages free tiers all work; no server code). One URL,
-no routes. After deploying:
+**GitHub Pages (default, zero extra setup):** `.github/workflows/deploy-pages.yml`
+lints, tests, builds, and publishes to Pages automatically on every push to
+`main`. One-time setup after the repo exists on GitHub: Settings → Pages →
+Build and deployment → Source: **GitHub Actions**. The live URL is
+`https://<username>.github.io/stw-pension-calc/`. The workflow sets
+`DEPLOY_TARGET=gh-pages` so Vite prefixes asset URLs with `/stw-pension-calc/`
+(see `vite.config.js`); a plain `npm run build` elsewhere stays rooted at `/`.
+
+**Elsewhere (Vercel / Netlify / Cloudflare Pages):** static site — `npm run
+build` produces `dist/`, host it anywhere, no server code, one URL, no
+routes. After deploying:
 
 1. Set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` as build-time env
    vars on the host (they're baked in at build).
