@@ -77,4 +77,17 @@ export const ASSUMPTIONS = {
   // instead of hardcoding one mix.
   equityReturn: { mean: 0.10, stdDev: 0.16 },
   bondReturn: { mean: 0.045, stdDev: 0.06 },
+
+  // --- New-entrant DROP track choice (main calculator) -------------------------
+  // New DROP entrants choose a track at entry: an 8-year plan-administered
+  // track (simple interest, years 1-5 fixed + years 6-8 range — reuses the
+  // inDrop* rates above) or a 10-year self-directed track (deposits invested
+  // in the market from day one at the member's chosen stock/bond mix — reuses
+  // equityReturn/bondReturn above). This is the default stock weight for the
+  // self-directed track's allocation field; the member can change it.
+  selfDirectedEquityDefault: 0.70,
+  // Window lengths for each track, in DROP years. Not expected to change, but
+  // kept here so the "8 vs 10" is never hardcoded in the engine.
+  planTrackYears: 8,
+  selfDirectedTrackYears: 10,
 };

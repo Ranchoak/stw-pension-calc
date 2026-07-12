@@ -15,6 +15,13 @@
 
 import { ASSUMPTIONS } from './assumptions.js';
 import { CONTRIB_FREQ } from './formDefaults.js';
+// New DROP entrants pick a track at entry: an 8-year plan-administered track
+// (tiered simple interest) or a 10-year self-directed track (deposits invested
+// in the market). Both models already exist, tested, in the In-DROP engine —
+// we reuse its two calendar-free primitives rather than re-deriving the math.
+// (Its date-based top-level functions aren't used here; a new entrant has no
+// past entry date or statement to reconcile.)
+import { accrueSimpleInterest, simulateSelfDirected } from './indropEngine.js';
 
 // ---- Salary & pension (deterministic) -------------------------------------
 
@@ -145,25 +152,42 @@ export function parseForm(form) {
   }
   const fasYears = { high2: 2, high3: 3, high5: 5 }[form.fasBasis] ?? 3;
 
-  const yearsToRetirement = form.retireBy === 'age'
-    ? need(num(form.retireAge), 'retirement age') - age
-    : need(num(form.targetYears), 'years-of-service target') - serviceYears;
-  check(yearsToRetirement >= 0,
-    form.retireBy === 'age'
-      ? 'Your planned retirement age is already behind you — set it to your current age to model retiring now.'
-      : 'You already have more service than your target — set the target to your current years of service to model retiring now.');
-  check(yearsToRetirement <= 50, 'Retirement is more than 50 years out — double-check the ages.');
+  // Separation is optional. Blank (null) means "use each DROP track's natural
+  // end" — only valid when a DROP track is chosen (below).
+  const sepRaw = form.retireBy === 'age' ? form.retireAge : form.targetYears;
+  const sepProvided = sepRaw !== '' && sepRaw != null;
+  let separationYears = null;
+  if (sepProvided) {
+    separationYears = form.retireBy === 'age'
+      ? need(num(form.retireAge), 'retirement age') - age
+      : need(num(form.targetYears), 'years-of-service target') - serviceYears;
+    check(separationYears >= 0,
+      form.retireBy === 'age'
+        ? 'Your planned retirement age is already behind you — set it to your current age to model retiring now.'
+        : 'You already have more service than your target — set the target to your current years of service to model retiring now.');
+    check(separationYears <= 50, 'Retirement is more than 50 years out — double-check the ages.');
+  }
 
-  let drop = null;
-  if (form.hasDrop === 'yes') {
-    const entryIn = need(num(form.dropEntryAge), 'DROP entry age') - age;
-    const rate = (num(form.dropRate) ?? ASSUMPTIONS.dropRateDefault * 100) / 100;
+  const dropTrack = ['none', 'plan8', 'self10'].includes(form.dropTrack) ? form.dropTrack : 'none';
+  let entryIn = null, sdEquity = null;
+  if (dropTrack === 'none') {
+    check(separationYears != null,
+      'Enter a planned retirement age (or years-of-service target), or pick a DROP track — the calculator needs to know when you retire.');
+  } else {
+    entryIn = need(num(form.dropEntryAge), 'DROP entry age') - age;
     check(entryIn >= 0, 'DROP entry age is in the past — use your current age or later.');
-    check(entryIn < yearsToRetirement, 'DROP entry must come before retirement.');
-    check(rate >= 0 && rate <= 0.15, 'DROP interest above 15% is not a real plan rate — double-check it.');
-    if (rate > 0.09) warnings.push(`${(rate * 100).toFixed(1)}% DROP interest is above any plan we know of — verify it against your plan document.`);
-    const compounding = form.dropCompounding === 'simple' ? 'simple' : 'compound';
-    drop = { entryIn, rate, compounding };
+    check(entryIn <= 40, 'That DROP entry age is decades out — double-check it.');
+    sdEquity = (num(form.sdEquityPct) ?? ASSUMPTIONS.selfDirectedEquityDefault * 100) / 100;
+    check(sdEquity >= 0 && sdEquity <= 1, 'Stock allocation must be between 0 and 100 percent.');
+    if (sdEquity === 1) {
+      warnings.push('100% stocks in the self-directed track means no bond cushion — not wrong, but aggressive for money on a fixed DROP clock. Make sure it matches your risk appetite.');
+    }
+    if (separationYears != null) {
+      check(entryIn < separationYears, 'DROP entry must come before your separation date.');
+      const sepDropYears = separationYears - entryIn;
+      check(sepDropYears >= 1,
+        'That leaves less than a year in DROP — set separation at least a year after DROP entry, or leave it blank to compare the full 8- and 10-year windows.');
+    }
   }
 
   const contribAmount = need(num(form.contribAmount), '457(b) contribution');
@@ -191,123 +215,185 @@ export function parseForm(form) {
 
   return {
     age, serviceYears, salary, raise, multiplier, fasYears,
-    yearsToRetirement, drop, startBalance, annualContribution, socialSecurity,
+    separationYears, dropTrack, entryIn, sdEquity,
+    startBalance, annualContribution, socialSecurity,
     warnings,
   };
+}
+
+// ---- DROP track balances ----------------------------------------------------
+
+// 8-year plan track: tiered simple interest (years 1-5 fixed, years 6-8 a
+// low/mid/high range), reusing the In-DROP engine's accrual primitive. Returns
+// a { low, mid, high } balance range at `dropYears`.
+function planTrackBalance({ monthlyPension, dropYears, A }) {
+  const sched = (year6PlusRate) => (dropYear) =>
+    dropYear <= 5 ? A.inDropYear1to5Rate : year6PlusRate;
+  const r = A.inDropYear6to8Range;
+  const at = (rate) => accrueSimpleInterest({ monthlyPension, years: dropYears, rateSchedule: sched(rate) });
+  return { low: at(r.low), mid: at(r.mid), high: at(r.high) };
+}
+
+// 10-year self-directed track: DROP deposits invested in the market from day
+// one at the member's chosen stock/bond mix, via the In-DROP engine's Monte
+// Carlo. Returns { low, mid, high } = { p10, p50, p90 } at `dropYears`.
+function selfDirectedTrackBalance({ annualPension, dropYears, equityWeight, A, rng, overrides }) {
+  const mc = simulateSelfDirected({
+    startingBalance: 0,
+    yearsRemaining: dropYears,
+    equityWeight,
+    annualContribution: annualPension,
+    numPaths: A.numPaths,
+    rng,
+  }, overrides);
+  return { low: mc.p10, mid: mc.p50, high: mc.p90 };
 }
 
 // ---- Top-level --------------------------------------------------------------
 
 // form: UI form state. overrides: any ASSUMPTIONS key, plus optional `rng`
 // for a seeded simulation.
+//
+// Returns one of two shapes, keyed by `mode`:
+//   'single'  — no DROP track. Same shape as before this feature: top-level
+//               retirementAge/pension/deferredComp/income/etc. (drop is null).
+//   'compare' — a DROP track was chosen. Both tracks are always computed so the
+//               review can show "8 vs 10". `tracks.plan8` and `tracks.self10`
+//               each carry a full result body; `dropTrackPick` marks the one
+//               the member leaned toward.
 export function calculate(form, overrides = {}) {
   const A = { ...ASSUMPTIONS, ...overrides };
   const i = parseForm(form);
+  const rng = overrides.rng ?? Math.random;
+  const usingDrop = i.dropTrack !== 'none';
 
-  // Pension freezes at DROP entry when DROP is used, else at retirement.
-  const freezeIn = i.drop ? i.drop.entryIn : i.yearsToRetirement;
+  // Pension freezes at DROP entry when DROP is used (identical for both tracks
+  // — same entry), else at separation. Shared across tracks.
+  const freezeIn = usingDrop ? i.entryIn : i.separationYears;
   const fas = finalAverageSalary({
-    currentSalary: i.salary,
-    raise: i.raise,
-    yearsUntilFreeze: freezeIn,
-    fasYears: i.fasYears,
+    currentSalary: i.salary, raise: i.raise, yearsUntilFreeze: freezeIn, fasYears: i.fasYears,
   });
   const serviceAtFreeze = i.serviceYears + freezeIn;
   const pensionAnnual = annualPension({ serviceYears: serviceAtFreeze, multiplier: i.multiplier, fas });
-
-  const drop = i.drop
-    ? {
-        years: i.yearsToRetirement - i.drop.entryIn,
-        rate: i.drop.rate,
-        compounding: i.drop.compounding,
-        balance: dropAccumulation({
-          annualPension: pensionAnnual,
-          years: i.yearsToRetirement - i.drop.entryIn,
-          rate: i.drop.rate,
-          compounding: i.drop.compounding,
-        }),
-      }
-    : null;
-  if (drop) drop.monthlyDraw = (drop.balance * A.safeWithdrawalRate) / 12;
-
-  const mc = simulateDeferredComp({
-    startBalance: i.startBalance,
-    annualContribution: i.annualContribution,
-    years: i.yearsToRetirement,
-    mean: A.returnMean,
-    stdDev: A.returnStdDev,
-    numPaths: A.numPaths,
-    rng: overrides.rng ?? Math.random,
-  });
-
+  const pensionMonthly = pensionAnnual / 12;
   const ssMonthly = i.socialSecurity ? i.socialSecurity.monthly : 0;
-  // Deflator from retirement back to today's purchasing power. Applied to the
-  // whole nominal monthly total; over a long horizon this is what a dollar of
-  // that future income actually buys now. (Simplification: a Social Security
-  // figure taken from an SSA statement is already in today's dollars, so for
-  // SS-heavy cases the real number is a touch conservative — noted in the UI.)
-  const realFactor = 1 / Math.pow(1 + A.inflation, i.yearsToRetirement);
+  const pension = {
+    annual: pensionAnnual, monthly: pensionMonthly, finalAverageSalary: fas,
+    serviceYears: serviceAtFreeze, multiplier: i.multiplier, frozenAtDropEntry: usingDrop,
+  };
+  const draw = (balance) => (balance * A.safeWithdrawalRate) / 12;
 
-  // A DROP payout is a lump sum, and people do different things with it (roll
-  // it over, pay off a house, buy an annuity). So it is NOT folded into the
-  // headline income; instead we surface what a safe-withdrawal draw on it
-  // would add, as an explicit "if you also invest the DROP" line.
-  const dropMonthlyDraw = drop ? (drop.balance * A.safeWithdrawalRate) / 12 : 0;
-
-  const scenario = (balance) => {
-    const totalMonthly = pensionAnnual / 12 + (balance * A.safeWithdrawalRate) / 12 + ssMonthly;
-    const totalMonthlyWithDrop = totalMonthly + dropMonthlyDraw;
-    return {
-      savingsBalance: balance,
-      monthlyPension: pensionAnnual / 12,
-      monthlySavingsDraw: (balance * A.safeWithdrawalRate) / 12,
-      monthlySocialSecurity: ssMonthly,
-      monthlyDropDraw: dropMonthlyDraw,
-      totalMonthly,
-      totalMonthlyReal: totalMonthly * realFactor,
-      totalMonthlyWithDrop,
-      totalMonthlyWithDropReal: totalMonthlyWithDrop * realFactor,
+  // Builds a full result body for one horizon + optional DROP balance range.
+  // The 457(b) sim and the today's-dollars deflator both key off
+  // yearsToRetirement, so they legitimately differ between an 8- and 10-year
+  // track (the longer one gets more contribution/growth years). DROP percentiles
+  // pair pessimist-with-pessimist: 457(b) P10 with the DROP low, and so on.
+  function body({ yearsToRetirement, dropBalanceRange, dropTrackId, dropYears, capNote }) {
+    const mc = simulateDeferredComp({
+      startBalance: i.startBalance, annualContribution: i.annualContribution,
+      years: yearsToRetirement, mean: A.returnMean, stdDev: A.returnStdDev,
+      numPaths: A.numPaths, rng,
+    });
+    const realFactor = 1 / Math.pow(1 + A.inflation, yearsToRetirement);
+    const scenario = (balance, dropDraw) => {
+      const totalMonthly = pensionMonthly + draw(balance) + ssMonthly;
+      const totalMonthlyWithDrop = totalMonthly + dropDraw;
+      return {
+        savingsBalance: balance,
+        monthlyPension: pensionMonthly,
+        monthlySavingsDraw: draw(balance),
+        monthlySocialSecurity: ssMonthly,
+        monthlyDropDraw: dropDraw,
+        totalMonthly,
+        totalMonthlyReal: totalMonthly * realFactor,
+        totalMonthlyWithDrop,
+        totalMonthlyWithDropReal: totalMonthlyWithDrop * realFactor,
+      };
     };
+    const dd = dropBalanceRange
+      ? { low: draw(dropBalanceRange.low), mid: draw(dropBalanceRange.mid), high: draw(dropBalanceRange.high) }
+      : { low: 0, mid: 0, high: 0 };
+    const drop = dropBalanceRange
+      ? { trackId: dropTrackId, years: dropYears, balance: dropBalanceRange, monthlyDraw: dd, capNote: capNote ?? null }
+      : null;
+    return {
+      retirementAge: i.age + yearsToRetirement,
+      yearsToRetirement,
+      publicSafetyPenaltyException:
+        i.age + yearsToRetirement >= 50 || i.serviceYears + yearsToRetirement >= 25,
+      pension,
+      drop,
+      deferredComp: mc,
+      income: {
+        conservative: scenario(mc.p10, dd.low),
+        median: scenario(mc.p50, dd.mid),
+        optimistic: scenario(mc.p90, dd.high),
+      },
+      socialSecurity: i.socialSecurity,
+    };
+  }
+
+  const assumptions = {
+    returnMean: A.returnMean, returnStdDev: A.returnStdDev, numPaths: A.numPaths,
+    safeWithdrawalRate: A.safeWithdrawalRate, inflation: A.inflation,
   };
 
+  // --- No DROP: single result, backward-compatible shape ---
+  if (!usingDrop) {
+    return {
+      mode: 'single',
+      inputs: i,
+      warnings: i.warnings,
+      assumptions,
+      ...body({ yearsToRetirement: i.separationYears, dropBalanceRange: null }),
+    };
+  }
+
+  // --- DROP: always compute both tracks so the review can compare 8 vs 10 ---
+  // Each track runs for min(natural window, separation-limited window). The
+  // 8-year plan track can't exist past year 8, so an explicit separation beyond
+  // that caps it at year 8 with a note (the member would have to leave then).
+  const trackYears = (naturalYears) => {
+    if (i.separationYears == null) return { dropYears: naturalYears, capNote: null };
+    const sepDropYears = i.separationYears - i.entryIn;
+    if (sepDropYears > naturalYears) {
+      const short = sepDropYears - naturalYears;
+      return {
+        dropYears: naturalYears,
+        capNote: `This track ends at year ${naturalYears} — the separation date you entered is ${short} year${short > 1 ? 's' : ''} later, so choosing it means leaving at year ${naturalYears}.`,
+      };
+    }
+    return { dropYears: sepDropYears, capNote: null };
+  };
+
+  const plan = trackYears(A.planTrackYears);
+  const self = trackYears(A.selfDirectedTrackYears);
+
+  const plan8 = body({
+    yearsToRetirement: i.entryIn + plan.dropYears,
+    dropBalanceRange: planTrackBalance({ monthlyPension: pensionMonthly, dropYears: plan.dropYears, A }),
+    dropTrackId: 'plan8',
+    dropYears: plan.dropYears,
+    capNote: plan.capNote,
+  });
+  const self10 = body({
+    yearsToRetirement: i.entryIn + self.dropYears,
+    dropBalanceRange: selfDirectedTrackBalance({
+      annualPension: pensionAnnual, dropYears: self.dropYears, equityWeight: i.sdEquity, A, rng, overrides,
+    }),
+    dropTrackId: 'self10',
+    dropYears: self.dropYears,
+    capNote: self.capNote,
+  });
+
   return {
+    mode: 'compare',
     inputs: i,
     warnings: i.warnings,
-    assumptions: {
-      returnMean: A.returnMean,
-      returnStdDev: A.returnStdDev,
-      numPaths: A.numPaths,
-      safeWithdrawalRate: A.safeWithdrawalRate,
-      inflation: A.inflation,
-    },
-    retirementAge: i.age + i.yearsToRetirement,
-    yearsToRetirement: i.yearsToRetirement,
-    // Whether the 10% early-withdrawal penalty exception for qualified public
-    // safety employees (IRC §72(t)(10)) is likely to apply at retirement:
-    // separation at age 50+, or 25+ years of service, whichever comes first.
-    // Informational only — the plan and a tax pro decide, not this calculator.
-    publicSafetyPenaltyException:
-      i.age + i.yearsToRetirement >= 50 || i.serviceYears + i.yearsToRetirement >= 25,
-    pension: {
-      annual: pensionAnnual,
-      monthly: pensionAnnual / 12,
-      finalAverageSalary: fas,
-      serviceYears: serviceAtFreeze,
-      multiplier: i.multiplier,
-      frozenAtDropEntry: !!i.drop,
-    },
-    drop,
-    deferredComp: mc,
-    // Conservative / median / optimistic map to P10 / P50 / P90 ending
-    // balances with the safe withdrawal rate applied — three scenarios,
-    // never one falsely-precise number.
-    income: {
-      conservative: scenario(mc.p10),
-      median: scenario(mc.p50),
-      optimistic: scenario(mc.p90),
-    },
-    // If SS is included, it starts at the claiming age, which may be years
-    // after retirement — the UI should label that gap.
-    socialSecurity: i.socialSecurity,
+    assumptions,
+    dropTrackPick: i.dropTrack, // 'plan8' | 'self10' — the one they leaned toward
+    dropEntryAge: i.age + i.entryIn,
+    sdEquityPct: Math.round(i.sdEquity * 100),
+    tracks: { plan8, self10 },
   };
 }

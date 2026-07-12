@@ -138,21 +138,6 @@ describe('calculate (end to end, deterministic)', () => {
     expect(r.retirementAge).toBe(55);
   });
 
-  it('freezes the pension at DROP entry and accumulates the DROP account', () => {
-    const r = calculate(
-      { ...form, hasDrop: 'yes', dropEntryAge: '52', dropRate: '5' },
-      opts,
-    );
-    // Frozen at entry (2 yrs from now): 27 yrs × 0.025 × 100,000 = 67,500/yr
-    expect(r.pension.annual).toBeCloseTo(67500, 6);
-    expect(r.pension.frozenAtDropEntry).toBe(true);
-    // DROP runs 3 yrs at 5%: 67,500 × [(1.05³ − 1)/0.05] × 1.05 = 223,433.44
-    expect(r.drop.years).toBe(3);
-    expect(r.drop.balance).toBeCloseTo(223433.4375, 2);
-    // The 457 simulation still runs the full 5 years to retirement
-    expect(r.deferredComp.p50).toBeCloseTo(100000 * 1.06 ** 5, 2);
-  });
-
   it('adds Social Security to every scenario when provided', () => {
     const r = calculate(
       { ...form, includeSS: 'yes', ssMonthly: '1800', ssClaimAge: '62' },
@@ -161,12 +146,6 @@ describe('calculate (end to end, deterministic)', () => {
     expect(r.income.median.monthlySocialSecurity).toBe(1800);
     expect(r.income.median.totalMonthly).toBeCloseTo(6250 + (133822.5579 * 0.04) / 12 + 1800, 2);
     expect(r.socialSecurity.claimAge).toBe(62);
-  });
-
-  it('rejects a DROP entry after retirement', () => {
-    expect(() =>
-      calculate({ ...form, hasDrop: 'yes', dropEntryAge: '58', dropRate: '5' }, opts),
-    ).toThrow(/before retirement/);
   });
 
   it('supports years-of-service retirement targets', () => {
@@ -198,24 +177,9 @@ describe('calculate (end to end, deterministic)', () => {
     expect(r.assumptions.inflation).toBe(0.025);
   });
 
-  it('keeps DROP out of headline income but reports what it would add', () => {
-    const r = calculate({ ...form, hasDrop: 'yes', dropEntryAge: '52', dropRate: '6' }, opts);
-    const swr = r.assumptions.safeWithdrawalRate;
-    // Headline total excludes the DROP entirely...
-    expect(r.income.median.totalMonthly).toBeCloseTo(
-      r.pension.monthly + r.income.median.monthlySavingsDraw, 6,
-    );
-    // ...and the additive line is exactly a safe-withdrawal draw on the balance.
-    const expectedDraw = (r.drop.balance * swr) / 12;
-    expect(r.drop.monthlyDraw).toBeCloseTo(expectedDraw, 6);
-    expect(r.income.median.monthlyDropDraw).toBeCloseTo(expectedDraw, 6);
-    expect(r.income.median.totalMonthlyWithDrop).toBeCloseTo(
-      r.income.median.totalMonthly + expectedDraw, 6,
-    );
-  });
-
-  it('reports no DROP draw when DROP is not used', () => {
+  it('reports no DROP draw in the single (no-DROP) result', () => {
     const r = calculate(form, opts);
+    expect(r.mode).toBe('single');
     expect(r.drop).toBeNull();
     expect(r.income.median.monthlyDropDraw).toBe(0);
     expect(r.income.median.totalMonthlyWithDrop).toBeCloseTo(r.income.median.totalMonthly, 6);
@@ -232,12 +196,128 @@ describe('calculate (end to end, deterministic)', () => {
     expect(calculate(byService, opts).publicSafetyPenaltyException).toBe(true);
   });
 
-  it('applies simple vs compound DROP interest per the form choice', () => {
-    const c = calculate({ ...form, hasDrop: 'yes', dropEntryAge: '52', dropRate: '6', dropCompounding: 'compound' }, opts);
-    const s = calculate({ ...form, hasDrop: 'yes', dropEntryAge: '52', dropRate: '6', dropCompounding: 'simple' }, opts);
-    expect(c.drop.compounding).toBe('compound');
-    expect(s.drop.compounding).toBe('simple');
-    expect(c.drop.balance).toBeGreaterThan(s.drop.balance);
+  it('single mode keeps the pre-DROP-track top-level shape', () => {
+    const r = calculate(form, opts);
+    expect(r.mode).toBe('single');
+    // Top-level fields the old single result exposed are still present.
+    expect(r.pension).toBeDefined();
+    expect(r.income.median).toBeDefined();
+    expect(r.retirementAge).toBe(55);
+    expect(r.tracks).toBeUndefined();
+  });
+});
+
+describe('DROP track choice (8-year plan vs 10-year self-directed)', () => {
+  // Age 50, DROP entry at 52 (2 yrs out), $100k flat salary, 2.5% multiplier,
+  // high-3. Deterministic everywhere: 0 volatility on the 457(b) AND on the
+  // self-directed blocks so balances are hand-checkable.
+  const base = {
+    ...INITIAL_FORM,
+    age: '50', yearsOfService: '25', salary: '100000', raisePct: '0',
+    multiplier: '2.5', fasBasis: 'high3',
+    retireBy: 'age', retireAge: '', targetYears: '',
+    dropTrack: 'plan8', dropEntryAge: '52', sdEquityPct: '70',
+    savingsBalance: '0', contribAmount: '0', contribFreq: 'annual',
+    includeSS: 'no',
+  };
+  // Zero out every volatility source so the self-directed Monte Carlo collapses
+  // to a deterministic 6% compounded annuity we can check by hand.
+  const opts = {
+    returnStdDev: 0, returnMean: 0.06, numPaths: 100,
+    equityReturn: { mean: 0.06, stdDev: 0 },
+    bondReturn: { mean: 0.06, stdDev: 0 },
+  };
+
+  it('returns compare mode with both tracks when no separation date is given', () => {
+    const r = calculate(base, opts);
+    expect(r.mode).toBe('compare');
+    expect(r.tracks.plan8).toBeDefined();
+    expect(r.tracks.self10).toBeDefined();
+    expect(r.dropTrackPick).toBe('plan8');
+    // Plan track ends at year 8, self-directed at year 10 → retirement ages
+    // 50 + 2 + 8 = 60 and 50 + 2 + 10 = 62.
+    expect(r.tracks.plan8.drop.years).toBe(8);
+    expect(r.tracks.self10.drop.years).toBe(10);
+    expect(r.tracks.plan8.retirementAge).toBe(60);
+    expect(r.tracks.self10.retirementAge).toBe(62);
+  });
+
+  it('freezes the pension at DROP entry, identical across both tracks', () => {
+    const r = calculate(base, opts);
+    // Frozen at entry (2 yrs out): 27 yrs × 2.5% × $100k = $67,500/yr.
+    expect(r.tracks.plan8.pension.annual).toBeCloseTo(67500, 6);
+    expect(r.tracks.self10.pension.annual).toBeCloseTo(67500, 6);
+    expect(r.tracks.plan8.pension.frozenAtDropEntry).toBe(true);
+  });
+
+  it('8-year plan track uses tiered simple interest (yrs 1-5 fixed, 6-8 range)', () => {
+    const r = calculate(base, opts);
+    const b = r.tracks.plan8.drop.balance;
+    // low < mid < high because years 6-8 credit a low/mid/high rate range.
+    expect(b.low).toBeLessThan(b.mid);
+    expect(b.mid).toBeLessThan(b.high);
+    // Hand-check the mid balance: $5,625/mo deposits, 8 yrs, simple interest,
+    // 6% yrs 1-5 and 4.5% (mid) yrs 6-8. Just assert it's in a sane band and
+    // above straight deposits ($5,625 × 96 = $540k).
+    expect(b.mid).toBeGreaterThan(540000);
+    expect(b.mid).toBeLessThan(650000);
+  });
+
+  it('self-directed track invests from day one; higher equity widens the range', () => {
+    // With volatility restored, more stocks → a wider P10–P90 spread.
+    const stochastic = { returnStdDev: 0, returnMean: 0.06, numPaths: 3000, rng: mulberry32(7) };
+    const conservative = calculate({ ...base, sdEquityPct: '20' }, stochastic);
+    const aggressive = calculate({ ...base, sdEquityPct: '90' }, stochastic);
+    const spread = (t) => t.tracks.self10.drop.balance.high - t.tracks.self10.drop.balance.low;
+    expect(spread(aggressive)).toBeGreaterThan(spread(conservative));
+  });
+
+  it('evaluates both tracks at a common point when separation lands within year 8', () => {
+    // Separation at 60 → 10 yrs out, DROP entry at 52 → 8 DROP years for both.
+    const r = calculate({ ...base, retireAge: '60' }, opts);
+    expect(r.tracks.plan8.drop.years).toBe(8);
+    expect(r.tracks.self10.drop.years).toBe(8);
+    expect(r.tracks.plan8.retirementAge).toBe(60);
+    expect(r.tracks.self10.retirementAge).toBe(60);
+    expect(r.tracks.plan8.drop.capNote).toBeNull();
+  });
+
+  it('caps the 8-year plan track at year 8 (with a note) when separation is later', () => {
+    // Separation at 65 → 15 yrs out, entry at 52 → 13 DROP years requested.
+    const r = calculate({ ...base, retireAge: '65' }, opts);
+    expect(r.tracks.plan8.drop.years).toBe(8);           // capped
+    expect(r.tracks.plan8.drop.capNote).toMatch(/year 8/);
+    expect(r.tracks.self10.drop.years).toBe(10);          // capped at its own 10
+    expect(r.tracks.self10.drop.capNote).toMatch(/year 10/);
+  });
+
+  it('pairs DROP percentiles pessimist-with-pessimist and keeps DROP out of the headline', () => {
+    const r = calculate(base, opts);
+    const t = r.tracks.plan8;
+    const swr = r.assumptions.safeWithdrawalRate;
+    // Headline excludes DROP; the "with DROP" line adds a draw on the balance.
+    expect(t.income.median.totalMonthly).toBeCloseTo(
+      t.pension.monthly + t.income.median.monthlySavingsDraw, 6,
+    );
+    expect(t.income.conservative.monthlyDropDraw).toBeCloseTo((t.drop.balance.low * swr) / 12, 6);
+    expect(t.income.median.monthlyDropDraw).toBeCloseTo((t.drop.balance.mid * swr) / 12, 6);
+    expect(t.income.optimistic.monthlyDropDraw).toBeCloseTo((t.drop.balance.high * swr) / 12, 6);
+  });
+
+  it('gives the self-directed (10-yr) track more 457(b) years than the plan (8-yr) track', () => {
+    const r = calculate({ ...base, savingsBalance: '0', contribAmount: '10000', contribFreq: 'annual' }, opts);
+    // Two extra contribution+growth years → a larger 457(b) at separation.
+    expect(r.tracks.self10.deferredComp.p50).toBeGreaterThan(r.tracks.plan8.deferredComp.p50);
+  });
+
+  it('requires a separation date when no DROP track is chosen', () => {
+    expect(() => calculate({ ...base, dropTrack: 'none', retireAge: '' }, opts))
+      .toThrow(/needs to know when you retire/);
+  });
+
+  it('rejects a DROP entry at or after the separation date', () => {
+    expect(() => calculate({ ...base, dropEntryAge: '58', retireAge: '56' }, opts))
+      .toThrow(/before your separation/);
   });
 });
 

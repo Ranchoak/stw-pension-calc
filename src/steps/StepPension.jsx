@@ -31,7 +31,13 @@ export default function StepPension({ form, set }) {
         </Field>
       </div>
 
-      <div className="subhead">When do you plan to go?</div>
+      <div className="subhead">When do you plan to separate? <span className="optional-tag">optional</span></div>
+      <p className="field-hint" style={{ marginTop: 0 }}>
+        If you'll use DROP, you can leave this blank — the next step lets you
+        compare the 8-year and 10-year DROP windows at their natural ends. Set a
+        date to pin both tracks to the same separation point instead. (Without
+        DROP, a date is required so we know when you retire.)
+      </p>
       <Choice
         name="Retirement target"
         value={form.retireBy}
@@ -43,12 +49,12 @@ export default function StepPension({ form, set }) {
       />
       <div className="grid" style={{ marginTop: 12 }}>
         {form.retireBy === 'age' ? (
-          <Field label="Planned retirement age">
-            <NumberInput value={form.retireAge} onChange={(v) => set('retireAge', v)} min="38" max="70" />
+          <Field label="Planned separation age" hint="Leave blank to compare DROP windows.">
+            <NumberInput value={form.retireAge} onChange={(v) => set('retireAge', v)} min="38" max="70" placeholder="optional" />
           </Field>
         ) : (
-          <Field label="Years-of-service target" hint="Total credited years when you pull the pin.">
-            <NumberInput value={form.targetYears} onChange={(v) => set('targetYears', v)} min="10" max="45" />
+          <Field label="Years-of-service target" hint="Total credited years when you pull the pin. Leave blank to compare DROP windows.">
+            <NumberInput value={form.targetYears} onChange={(v) => set('targetYears', v)} min="10" max="45" placeholder="optional" />
           </Field>
         )}
       </div>
