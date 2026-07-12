@@ -43,12 +43,26 @@ export const ASSUMPTIONS = {
   inDropYear1to5Rate: 0.06,
   // Years 6-8: "plan returns" — the board sets the rate each year, so it's
   // modeled as a range (low/mid/high), never a point estimate; same product
-  // rule as everywhere else in this app. NOTE: DROP years 9-10 are only
-  // reachable via the 10-year self-directed conversion (built in a later
-  // step); whatever is NOT self-directed in years 9-10 currently reuses this
-  // same range. That is our assumption to verify against the actual plan
-  // document, not a stated plan rule.
+  // rule as everywhere else in this app. This range stops at year 8; years
+  // 9-10 are modeled separately — see planReturn below.
   inDropYear6to8Range: { low: 0.03, mid: 0.045, high: 0.06 },
+  // Years 9-10 (only reachable via the 10-year self-directed conversion) are
+  // no longer modeled as an extension of the years-6-8 simple-interest
+  // range. Real plan documentation doesn't describe a years-9-10 crediting
+  // rate at all, so instead of guessing one, whatever balance isn't
+  // personally self-directed rides along with the pension FUND's own real
+  // historical return and volatility for years 9-10, run through the same
+  // Monte Carlo engine as the self-directed slice. Source: Fort Lauderdale
+  // Police & Firefighters' Retirement System actual trailing performance
+  // (10-year annualized return 7.64%, since-inception 7.32%, 3-year
+  // annualized standard deviation 6.96%, 5-year annualized standard
+  // deviation 8.73% — quarterly investment performance report, period
+  // ending 12/31/25) and actuarial assumed long-term return (7.05%, FY2025
+  // valuation). 7.3%/8.0% is the round midpoint of the real trailing-return
+  // data, not user-configurable — every member gets the same number here
+  // regardless of what equity weight they picked for their own self-directed
+  // slice.
+  planReturn: { mean: 0.073, stdDev: 0.08 },
   // How far a user's statement balance may diverge from our computed estimate
   // before the projection flags it for the UI ("your statement says X, our
   // estimate says Y"). Below this, the gap is rounding/timing noise and the

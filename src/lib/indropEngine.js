@@ -215,8 +215,11 @@ export function simulateSelfDirected(
 // Deliberate simplifications, both surfaced in the return value:
 // - The balance at conversion uses the MID plan rate for any pre-conversion
 //   years past 5; the low/high plan range applies to the leftover plan
-//   balance from conversion onward (including years 9-10, an assumption —
-//   see assumptions.js).
+//   balance from conversion through year 8. Past year 8 the plan documents
+//   no crediting rate at all, so the leftover's year-8 balance rides the
+//   pension fund's own historical return/volatility (planReturn in
+//   assumptions.js) through the same Monte Carlo engine as the self-directed
+//   slice — see the plan-track block below.
 // - With convertPct 0 nothing converts and the result delegates to
 //   projectBalanceRange, matching it exactly (deposits continue on the plan
 //   track for the whole window, as if no conversion happened).
@@ -309,14 +312,41 @@ export function projectWithConversion(
   }, overrides);
   const selfDirectedRange = { low: mc.p10, mid: mc.p50, high: mc.p90 };
 
-  // Plan track: only what was left behind at conversion, earning the tiered
-  // simple-interest schedule with no deposits of its own. Years 9-10 reuse
-  // inDropYear6to8Range per the assumption documented in assumptions.js.
-  const remainder = (r) => accrueWindow({
-    monthlyPension: 0, from: convertAtYear, to: exitYear,
+  // Plan track: only what was left behind at conversion, with no deposits of
+  // its own. Phase A: the plan's stated tiered simple interest, through year
+  // 8 at the latest — for exits at year 8 or earlier this is the whole
+  // answer, unchanged from before years 9-10 existed. Phase B (exit years
+  // 9-10 only): the plan documents no crediting rate past year 8, so instead
+  // of extending the years-6-8 range, the year-8 balance rides the pension
+  // fund's own historical return/volatility (planReturn, assumptions.js)
+  // through the same Monte Carlo engine as the self-directed slice, paired
+  // pessimist-with-pessimist: the plan-low year-8 balance carries through
+  // P10, mid through P50, high through P90.
+  const throughYear8 = (r) => accrueWindow({
+    monthlyPension: 0, from: convertAtYear, to: Math.min(exitYear, 8),
     rateForYear: rateFn(r), startingBalance: planLeftover,
   });
-  const remainderBalance = { low: remainder(range.low), mid: remainder(range.mid), high: remainder(range.high) };
+  let remainderBalance = {
+    low: throughYear8(range.low),
+    mid: throughYear8(range.mid),
+    high: throughYear8(range.high),
+  };
+  if (exitYear > 8) {
+    const fundRide = (startBalance) => simulateDeferredComp({
+      startBalance,
+      annualContribution: 0, // this bucket still gets no deposits
+      years: exitYear - 8,
+      mean: A.planReturn.mean,
+      stdDev: A.planReturn.stdDev,
+      numPaths: A.numPaths,
+      rng: overrides.rng ?? Math.random,
+    });
+    remainderBalance = {
+      low: fundRide(remainderBalance.low).p10,
+      mid: fundRide(remainderBalance.mid).p50,
+      high: fundRide(remainderBalance.high).p90,
+    };
+  }
 
   return {
     low: selfDirectedRange.low + remainderBalance.low,

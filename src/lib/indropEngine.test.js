@@ -298,23 +298,27 @@ describe('projectWithConversion', () => {
     }
   });
 
-  it('full 10-year path: tiered simple interest to year 6, MC + plan track to year 10', () => {
+  it('full 10-year path: tiered simple interest to year 8, fund-return MC for years 9-10', () => {
     // 6 years in exactly. Balance at conversion (mid): 72 deposits +
     // 1000/12·(0.06·Σ₀⁵⁹k + 0.045·Σ₆₀⁷¹k) = 72000 + 11,797.5 = 83,797.5.
     // Plan track keeps half (41,898.75) with NO new deposits (they're
-    // redirected to self-directed post-conversion), earning tiered interest
-    // for 4 more years at mid 4.5%: 41,898.75·0.045·4 = 7,541.775 →
-    // remainder mid = 49,440.525. The self-directed slice, meanwhile,
+    // redirected to self-directed post-conversion). Phase A: tiered simple
+    // interest for years 7-8 only → ×(1 + r·2). Phase B: years 9-10 ride the
+    // fund's planReturn — volatility overridden to 0 here so the closed form
+    // is exact: phaseA(r) · 1.073². The self-directed slice, meanwhile,
     // receives 41,898.75 plus every deposit from year 6 to 10 (48,000 more).
     const r = projectWithConversion(
       {
         monthlyPension: 1000, entryDate: '2020-01-01', asOfDate: '2026-01-01',
         convertAtYear: 6, exitYear: 10, convertPct: 50, equityWeight: 0.7,
       },
-      { rng: mulberry32(7) },
+      { rng: mulberry32(7), planReturn: { mean: 0.073, stdDev: 0 } },
     );
     expect(r.balanceAtConversion).toBeCloseTo(83797.5, 6);
-    expect(r.remainderBalance.mid).toBeCloseTo(49440.525, 4);
+    const fund2yr = 1.073 ** 2;
+    expect(r.remainderBalance.low).toBeCloseTo(41898.75 * 1.06 * fund2yr, 6);
+    expect(r.remainderBalance.mid).toBeCloseTo(41898.75 * 1.09 * fund2yr, 6);
+    expect(r.remainderBalance.high).toBeCloseTo(41898.75 * 1.12 * fund2yr, 6);
     // Self-directed median should clear its 41,898.75 start plus 48,000 of
     // deposits even before any market growth.
     expect(r.selfDirectedRange.mid).toBeGreaterThan(41898.75 + 48000);
@@ -323,6 +327,33 @@ describe('projectWithConversion', () => {
     expect(r.mid).toBeCloseTo(r.selfDirectedRange.mid + r.remainderBalance.mid, 8);
     expect(r.high).toBeCloseTo(r.selfDirectedRange.high + r.remainderBalance.high, 8);
     expect(r.selfDirectedRange.low).toBeLessThan(r.selfDirectedRange.high);
+  });
+
+  it('exit at year 8 or earlier is untouched by the years-9-10 change', () => {
+    // Same scenario as the 10-year path but exiting at 8: the plan track is
+    // pure tiered simple interest — 41,898.75·(1 + r·2) for years 7-8 —
+    // which is exactly the pre-change closed form. No Monte Carlo touches it.
+    const r = projectWithConversion(
+      {
+        monthlyPension: 1000, entryDate: '2020-01-01', asOfDate: '2026-01-01',
+        convertAtYear: 6, exitYear: 8, convertPct: 50, equityWeight: 0.7,
+      },
+      { rng: mulberry32(7) },
+    );
+    expect(r.remainderBalance.low).toBeCloseTo(41898.75 * 1.06, 6);
+    expect(r.remainderBalance.mid).toBeCloseTo(41898.75 * 1.09, 6);
+    expect(r.remainderBalance.high).toBeCloseTo(41898.75 * 1.12, 6);
+  });
+
+  it('years 9-10: the leftover rides fund volatility, so its spread widens past year 8', () => {
+    const base = {
+      monthlyPension: 1000, entryDate: '2020-01-01', asOfDate: '2026-01-01',
+      convertAtYear: 6, convertPct: 50, equityWeight: 0.7,
+    };
+    const at8 = projectWithConversion({ ...base, exitYear: 8 }, { rng: mulberry32(11) });
+    const at10 = projectWithConversion({ ...base, exitYear: 10 }, { rng: mulberry32(11) });
+    expect(at10.remainderBalance.high - at10.remainderBalance.low)
+      .toBeGreaterThan(at8.remainderBalance.high - at8.remainderBalance.low);
   });
 
   it('a statement balance anchors the conversion balance, mismatch logic intact', () => {

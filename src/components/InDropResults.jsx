@@ -129,8 +129,10 @@ export default function InDropResults({ result, onEdit }) {
               <div className="detail-big">{usd(p.remainderBalance.mid)}<span> mid</span></div>
               <p>
                 Only what you left behind at conversion — no new deposits land
-                here once you convert. Range {usd(p.remainderBalance.low)} – {usd(p.remainderBalance.high)} from
-                the {pctStr(rates.low)}%–{pctStr(rates.high)}% years-6+ crediting range.
+                here once you convert.
+                {inputs.exitYear > 8
+                  ? ` Plan crediting (${pctStr(rates.low)}%–${pctStr(rates.high)}%) through year 8, then the year-8 balance rides the pension fund's own returns for years 9–10. Range ${usd(p.remainderBalance.low)} – ${usd(p.remainderBalance.high)}.`
+                  : ` Range ${usd(p.remainderBalance.low)} – ${usd(p.remainderBalance.high)} from the ${pctStr(rates.low)}%–${pctStr(rates.high)}% years-6+ crediting range.`}
               </p>
             </section>
           </>
@@ -149,8 +151,8 @@ export default function InDropResults({ result, onEdit }) {
 
       <div className="assumptions">
         Assumptions you can argue with: 6% simple interest years 1–5 (plan-fixed),
-        {' '}{pctStr(rates.low)}/{pctStr(rates.mid)}/{pctStr(rates.high)}% simple for years 6+
-        {inputs.exitYear > 8 ? ' (including years 9–10 for anything not self-directed — our assumption, not a stated plan rule)' : ''}.
+        {' '}{pctStr(rates.low)}/{pctStr(rates.mid)}/{pctStr(rates.high)}% simple for years {inputs.exitYear > 8 ? '6–8' : '6+'}.
+        {inputs.exitYear > 8 && ` The plan states no crediting rate for years 9–10, so anything not self-directed rides the pension fund's own historical performance — ${pctStr(ASSUMPTIONS.planReturn.mean)}%/yr (±${pctStr(ASSUMPTIONS.planReturn.stdDev)}%), simulated the same way as the self-directed slice. That's our stand-in, not a stated plan rule.`}
         {converting && ` Self-directed returns blend stocks at ${pctStr(ASSUMPTIONS.equityReturn.mean)}%/yr (±${pctStr(ASSUMPTIONS.equityReturn.stdDev)}%) and bonds at ${pctStr(ASSUMPTIONS.bondReturn.mean)}%/yr (±${pctStr(ASSUMPTIONS.bondReturn.stdDev)}%), ignoring stock/bond correlation.`}
         {' '}{converting
           ? 'New pension deposits after conversion go to the self-directed track, not the plan track.'

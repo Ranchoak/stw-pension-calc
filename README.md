@@ -125,10 +125,16 @@ the portion of the balance-at-conversion you explicitly leave behind stays
 on plan rates, and it gets no further deposits (confirmed 2026-07-11).
 
 **⚠️ Still verify with the pension board before this page goes live:** the
-calculator assumes DROP years 9–10 (only reachable via the self-directed
-conversion) credit the same 3–6% plan-returns range as years 6–8 for
-whatever balance wasn't self-directed. That range isn't a stated plan rule —
-it's a working assumption flagged in `src/lib/assumptions.js`.
+plan documents no crediting rate for DROP years 9–10 (only reachable via
+the self-directed conversion), so the calculator doesn't extend the 3–6%
+range past year 8. Instead, whatever balance wasn't self-directed keeps
+plan crediting through year 8, then the year-8 balance rides the pension
+fund's own historical return and volatility (7.3%/yr ±8%, from the Fort
+Lauderdale Police & Firefighters' Retirement System's trailing performance
+— `planReturn` in `src/lib/assumptions.js`) through the same Monte Carlo
+engine as the self-directed slice. What to confirm with the board: what
+actually happens to a non-self-directed balance in years 9–10, and whether
+a fund-return model is an acceptable stand-in until they say.
 
 ## Where things are
 
