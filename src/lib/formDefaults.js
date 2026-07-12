@@ -34,15 +34,20 @@ export const INITIAL_FORM = {
   multiplier: '3.375',
   customMultiplier: '',
   fasBasis: 'high2',
+  // Separation is now OPTIONAL. Blank means "use each DROP track's natural end"
+  // (entry + 8 for the plan track, entry + 10 for self-directed) so the review
+  // compares the two side by side. Filled in, both tracks are evaluated at that
+  // shared separation point instead.
   retireBy: 'age', // 'age' | 'years'
-  retireAge: '55',
-  targetYears: '25',
+  retireAge: '',
+  targetYears: '',
 
-  // DROP
-  hasDrop: 'no', // 'yes' | 'no'
+  // DROP — new entrants choose a track at entry (8-year plan vs 10-year
+  // self-directed). dropEntryAge anchors the DROP timeline; sdEquityPct is the
+  // self-directed track's stock allocation (the rest modeled as bonds).
+  dropTrack: 'none', // 'none' | 'plan8' | 'self10'
   dropEntryAge: '',
-  dropRate: '6',
-  dropCompounding: 'compound', // 'compound' | 'simple'
+  sdEquityPct: '70',
 
   // Deferred comp
   savingsBalance: '',
@@ -56,15 +61,13 @@ export const INITIAL_FORM = {
 };
 
 // Required numeric fields per step, used for lightweight validation.
+// Separation (retireAge/targetYears) is intentionally NOT required — leaving it
+// blank is a valid, meaningful choice (compare both tracks at their natural
+// ends). The engine's parseForm does the real cross-field validation.
 export const STEP_REQUIREMENTS = {
   about: ['age', 'yearsOfService', 'salary'],
-  pension: (form) => {
-    const fields = [];
-    if (form.multiplier === 'other') fields.push('customMultiplier');
-    fields.push(form.retireBy === 'age' ? 'retireAge' : 'targetYears');
-    return fields;
-  },
-  drop: (form) => (form.hasDrop === 'yes' ? ['dropEntryAge', 'dropRate'] : []),
+  pension: (form) => (form.multiplier === 'other' ? ['customMultiplier'] : []),
+  drop: (form) => (form.dropTrack === 'none' ? [] : ['dropEntryAge']),
   savings: ['savingsBalance', 'contribAmount'],
   social: (form) => (form.includeSS === 'yes' ? ['ssMonthly', 'ssClaimAge'] : []),
   review: [],

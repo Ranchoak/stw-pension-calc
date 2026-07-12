@@ -10,12 +10,21 @@ export default function StepReview({ form }) {
   const fas = FAS_OPTIONS.find((o) => o.value === form.fasBasis)?.label;
   const freqLabel = (CONTRIB_FREQ[form.contribFreq] ?? CONTRIB_FREQ.annual).label.toLowerCase();
 
+  const sepGiven = (form.retireBy === 'age' ? form.retireAge : form.targetYears) !== '';
+  const sepLabel = !sepGiven
+    ? 'Not set — comparing DROP windows'
+    : form.retireBy === 'age' ? `Age ${form.retireAge}` : `${form.targetYears} years of service`;
+  const dropLabels = { plan8: '8-year plan track', self10: '10-year self-directed' };
+  const dropLabel = form.dropTrack === 'none' || !form.dropTrack
+    ? 'Not using'
+    : `${dropLabels[form.dropTrack]} · enter at ${form.dropEntryAge || '—'}, ${form.sdEquityPct || '—'}% stocks in self-directed`;
+
   const rows = [
     ['Age / years of service', `${form.age || '—'} yrs old · ${form.yearsOfService || '—'} yrs in`],
     ['Salary & raises', `${fmt$(form.salary)} / yr, +${form.raisePct || 0}%/yr`],
     ['Pension formula', `${mult} · ${fas}`],
-    ['Retirement target', form.retireBy === 'age' ? `Age ${form.retireAge}` : `${form.targetYears} years of service`],
-    ['DROP', form.hasDrop === 'yes' ? `Enter at ${form.dropEntryAge || '—'}, ${form.dropRate}% ${form.dropCompounding} interest` : 'Not using'],
+    ['Separation', sepLabel],
+    ['DROP', dropLabel],
     ['Deferred comp', `${fmt$(form.savingsBalance)} now, ${fmt$(form.contribAmount)} ${freqLabel} going in`],
     ['Social Security', form.includeSS === 'yes' ? `${fmt$(form.ssMonthly)}/mo at ${form.ssClaimAge}` : 'Left out'],
   ];

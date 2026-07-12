@@ -35,10 +35,11 @@ export default function StepPlanTerms({ form, set }) {
         </Field>
       </div>
       <div className="notice" style={{ marginTop: 14 }}>
-        If you later convert to the 10-year self-directed option, anything you
-        <em> don't</em> self-direct in years 9–10 is modeled at this same range.
-        That's this calculator's assumption, not a stated plan rule — your plan
-        document may treat those years differently.
+        This range only runs through year 8. If you later convert to the
+        10-year self-directed option, anything you <em>don't</em> self-direct
+        in years 9–10 rides the pension fund's own historical performance
+        instead — the plan states no crediting rate for those years, so that's
+        this calculator's stand-in, not a stated plan rule.
       </div>
       <p className="field-hint" style={{ marginTop: 8 }}>
         Simple interest means only your credited pension payments earn interest —
