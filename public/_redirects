@@ -2,5 +2,11 @@
 # with the main retirement calculator (in-drop.html is a second Vite entry
 # point, built alongside index.html). Requests arriving at its own subdomain
 # get index.html swapped for in-drop.html; every other host is untouched.
-https://indrop.shifttowealthplanning.com/*  /in-drop.html  200
-http://indrop.shifttowealthplanning.com/*   /in-drop.html  200
+#
+# The trailing "!" (force) is required: without it, Netlify skips a redirect
+# rule whenever the requested path already resolves to a real file, and since
+# domain aliases share the same file system as the primary domain, "/" always
+# resolves to index.html by default. Confirmed by testing — the unforced rule
+# silently lost to that default and kept serving index.html on this subdomain.
+https://indrop.shifttowealthplanning.com/*  /in-drop.html  200!
+http://indrop.shifttowealthplanning.com/*   /in-drop.html  200!
