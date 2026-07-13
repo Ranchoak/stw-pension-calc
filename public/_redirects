@@ -1,12 +1,18 @@
 # Host-based rewrite: the In-DROP calculator shares this Netlify project/deploy
 # with the main retirement calculator (in-drop.html is a second Vite entry
-# point, built alongside index.html). Requests arriving at its own subdomain
-# get index.html swapped for in-drop.html; every other host is untouched.
+# point, built alongside index.html). Requests to this subdomain's root get
+# index.html swapped for in-drop.html; every other host is untouched.
+#
+# Deliberately NOT a /* wildcard: this app has no client-side router, so the
+# only path that ever needs rewriting is the bare "/". A wildcard here also
+# rewrites /assets/*.js requests to in-drop.html's markup (wrong content-type,
+# app fails to mount with no visible console error) — confirmed by testing.
+# Static files (JS/CSS/favicon/icons) resolve normally on every host as-is.
 #
 # The trailing "!" (force) is required: without it, Netlify skips a redirect
 # rule whenever the requested path already resolves to a real file, and since
 # domain aliases share the same file system as the primary domain, "/" always
 # resolves to index.html by default. Confirmed by testing — the unforced rule
 # silently lost to that default and kept serving index.html on this subdomain.
-https://indrop.shifttowealthplanning.com/*  /in-drop.html  200!
-http://indrop.shifttowealthplanning.com/*   /in-drop.html  200!
+https://indrop.shifttowealthplanning.com/  /in-drop.html  200!
+http://indrop.shifttowealthplanning.com/   /in-drop.html  200!
