@@ -1,0 +1,6 @@
+# Host-based rewrite: the In-DROP calculator shares this Netlify project/deploy
+# with the main retirement calculator (in-drop.html is a second Vite entry
+# point, built alongside index.html). Requests arriving at its own subdomain
+# get index.html swapped for in-drop.html; every other host is untouched.
+https://indrop.shifttowealthplanning.com/*  /in-drop.html  200
+http://indrop.shifttowealthplanning.com/*   /in-drop.html  200
