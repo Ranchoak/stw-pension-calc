@@ -8,25 +8,6 @@
 const usd = (v) => '$' + Math.round(v).toLocaleString('en-US');
 const multPct = (m) => (m * 100).toFixed(3).replace(/\.?0+$/, '');
 
-function ScenarioRow({ label, sub, s, emphasized, showReal }) {
-  return (
-    <div className={`scen-row ${emphasized ? 'em' : ''}`}>
-      <div className="scen-head">
-        <span className="scen-label">{label}<span className="scen-sub"> · {sub}</span></span>
-        <span className="scen-total">
-          {usd(s.totalMonthly)}<span className="scen-mo">/mo</span>
-          {showReal && <span className="scen-real">≈ {usd(s.totalMonthlyReal)} in today's $</span>}
-        </span>
-      </div>
-      <div className="scen-breakdown">
-        pension {usd(s.monthlyPension)}
-        {' + '}457(b) draw {usd(s.monthlySavingsDraw)}
-        {s.monthlySocialSecurity > 0 && <> + Social Security {usd(s.monthlySocialSecurity)}</>}
-      </div>
-    </div>
-  );
-}
-
 // Shared pre-tax / early-withdrawal-penalty disclosure. `qualifies` and the age
 // summary are computed by the caller (they differ between single and compare).
 function TaxNote({ qualifies, ageSummary }) {
@@ -91,21 +72,24 @@ function SingleView({ result, onEdit }) {
   } = result;
   const cons = income.conservative, med = income.median, opt = income.optimistic;
 
-  const max = opt.totalMonthly * 1.06;
-  const pct = (v) => Math.min((v / max) * 100, 100);
   const ssStartsLater = socialSecurity && socialSecurity.claimAge > retirementAge;
-  const hasSpread = opt.totalMonthly - cons.totalMonthly >= 1;
+  const has457 = deferredComp.p50 > 0;
+  // Whether the 457(b) draw itself varies meaningfully across percentiles —
+  // decides whether the boost line below shows a range or just one number.
+  const boostHasSpread = opt.monthlySavingsDraw - cons.monthlySavingsDraw >= 1;
   const yrs = result.yearsToRetirement;
   const showReal = yrs >= 2;
+  const swrPct = Math.round(assumptions.safeWithdrawalRate * 1000) / 10;
 
   return (
     <main className="card results">
       <h2>Your retirement picture at {retirementAge}</h2>
       <p className="step-intro">
-        Estimated total monthly income — pension
-        {deferredComp.p50 > 0 && ` plus a ${Math.round(assumptions.safeWithdrawalRate * 1000) / 10}% withdrawal on the 457(b)`}
+        Estimated guaranteed monthly income — pension
         {socialSecurity ? ' plus your Social Security number' : ''}.
-        {hasSpread ? ' Three scenarios, because markets don\'t promise anything.' : ' With no 457(b) to model, this is your guaranteed pension income.'}
+        {has457
+          ? ' Your 457(b) is shown separately below, since it rides the market instead of being guaranteed.'
+          : ' Add 457(b) savings on an earlier step to see how much extra income it could add.'}
       </p>
 
       {warnings && warnings.length > 0 && (
@@ -116,44 +100,40 @@ function SingleView({ result, onEdit }) {
       )}
 
       <div className="hero">
-        <div className="hero-label">{hasSpread ? 'Median scenario' : 'Guaranteed monthly income'}</div>
-        <div className="hero-number">{usd(med.totalMonthly)}<span className="hero-mo">/mo</span></div>
-        {hasSpread && <div className="hero-range">likely range {usd(cons.totalMonthly)} – {usd(opt.totalMonthly)}</div>}
+        <div className="hero-label">Guaranteed monthly income</div>
+        <div className="hero-number">{usd(med.totalMonthlyGuaranteed)}<span className="hero-mo">/mo</span></div>
         {showReal && (
           <div className="hero-real">
-            ≈ {usd(med.totalMonthlyReal)}/mo in today's dollars
+            ≈ {usd(med.totalMonthlyGuaranteedReal)}/mo in today's dollars
             <span className="hero-real-note"> · what it'd buy now after {yrs} yrs at {(assumptions.inflation * 100).toFixed(1)}% inflation</span>
           </div>
         )}
       </div>
 
-      {hasSpread && (
-        <div className="range-wrap" aria-hidden="true">
-          <div className="range-floor-label" style={{ left: `${pct(med.monthlyPension)}%` }}>
-            pension alone: {usd(med.monthlyPension)}
-          </div>
-          <div className="range-track">
-            <div className="range-guaranteed" style={{ width: `${pct(med.monthlyPension)}%` }} />
-            <div className="range-band" style={{ left: `${pct(cons.totalMonthly)}%`, width: `${pct(opt.totalMonthly) - pct(cons.totalMonthly)}%` }} />
-            <div className="range-dot" style={{ left: `${pct(med.totalMonthly)}%` }} />
-          </div>
-          <div className="range-scale"><span>$0</span><span>{usd(max)}/mo</span></div>
-        </div>
-      )}
-
-      {hasSpread && (
-        <div className="scen-list">
-          <ScenarioRow label="Conservative" sub="10th percentile" s={cons} showReal={showReal} />
-          <ScenarioRow label="Median" sub="50th percentile" s={med} emphasized showReal={showReal} />
-          <ScenarioRow label="Optimistic" sub="90th percentile" s={opt} showReal={showReal} />
-        </div>
-      )}
-
       {ssStartsLater && (
         <p className="ss-note">
           Social Security starts at {socialSecurity.claimAge}, {socialSecurity.claimAge - retirementAge} year{socialSecurity.claimAge - retirementAge > 1 ? 's' : ''} after
-          you retire — until then, subtract {usd(socialSecurity.monthly)} from each total.
+          you retire — until then, subtract {usd(socialSecurity.monthly)} from the guaranteed figure above.
         </p>
+      )}
+
+      {has457 && (
+        <div className="drop-add">
+          <div className="drop-add-head">
+            <span>If you also draw {swrPct}% on your 457(b)</span>
+            <span className="drop-add-plus">+{usd(med.monthlySavingsDraw)}<span className="scen-mo">/mo</span></span>
+          </div>
+          <div className="drop-add-total">
+            Median total becomes <strong>{usd(med.totalMonthly)}/mo</strong>
+            {boostHasSpread && <> · range {usd(cons.totalMonthly)} – {usd(opt.totalMonthly)}</>}
+            {showReal && <span className="drop-add-real"> (≈ {usd(med.totalMonthlyReal)}/mo in today's dollars)</span>}
+          </div>
+          <div className="drop-add-note">
+            This assumes a {swrPct}% withdrawal rate on your simulated 457(b) balance — a
+            range, not a promise, since it rides the market. Kept separate from the
+            guaranteed figure above so the two don't get confused with each other.
+          </div>
+        </div>
       )}
 
       <div className="detail-grid">
@@ -168,7 +148,7 @@ function SingleView({ result, onEdit }) {
 
         <section className="detail">
           <h3>457(b) at retirement</h3>
-          {deferredComp.p50 > 0 ? (
+          {has457 ? (
             <>
               <div className="detail-big">{usd(deferredComp.p50)}<span> median</span></div>
               <p>10th–90th percentile: {usd(deferredComp.p10)} – {usd(deferredComp.p90)}, across {assumptions.numPaths.toLocaleString()} simulated market paths.</p>

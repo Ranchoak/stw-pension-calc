@@ -296,7 +296,13 @@ export function calculate(form, overrides = {}) {
     });
     const realFactor = 1 / Math.pow(1 + A.inflation, yearsToRetirement);
     const scenario = (balance, dropDraw) => {
-      const totalMonthly = pensionMonthly + draw(balance) + ssMonthly;
+      // "Guaranteed" = pension + Social Security only — both fixed numbers,
+      // not market-dependent, so this is identical across all three
+      // percentiles (unlike totalMonthly, which folds in the 457(b) draw and
+      // so does vary). The UI headlines this instead of totalMonthly so a
+      // pension holder's certain income isn't dressed up as a "median guess."
+      const totalMonthlyGuaranteed = pensionMonthly + ssMonthly;
+      const totalMonthly = totalMonthlyGuaranteed + draw(balance);
       const totalMonthlyWithDrop = totalMonthly + dropDraw;
       return {
         savingsBalance: balance,
@@ -304,6 +310,8 @@ export function calculate(form, overrides = {}) {
         monthlySavingsDraw: draw(balance),
         monthlySocialSecurity: ssMonthly,
         monthlyDropDraw: dropDraw,
+        totalMonthlyGuaranteed,
+        totalMonthlyGuaranteedReal: totalMonthlyGuaranteed * realFactor,
         totalMonthly,
         totalMonthlyReal: totalMonthly * realFactor,
         totalMonthlyWithDrop,
