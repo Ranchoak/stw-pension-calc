@@ -214,6 +214,14 @@ function TrackCard({ track, id, isPick, showReal, swrPct }) {
         <div className="track-metric-range">range {usd(b.low)} – {usd(b.high)}</div>
       </div>
 
+      {has457 && (
+        <div className="track-metric">
+          <div className="track-metric-label">457(b) balance at exit</div>
+          <div className="track-metric-big">{usd(track.deferredComp.p50)}</div>
+          <div className="track-metric-range">range {usd(track.deferredComp.p10)} – {usd(track.deferredComp.p90)}</div>
+        </div>
+      )}
+
       <div className="track-metric">
         <div className="track-metric-label">Guaranteed monthly income</div>
         <div className="track-metric-big">{usd(med.totalMonthlyGuaranteed)}<span className="scen-mo">/mo</span></div>
