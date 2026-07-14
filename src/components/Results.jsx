@@ -190,12 +190,16 @@ const TRACK_META = {
   self10: { name: '10-year self-directed', blurb: 'Invested in the market from day one; two extra years.' },
 };
 
-function TrackCard({ track, id, isPick, showReal }) {
+function TrackCard({ track, id, isPick, showReal, swrPct }) {
   const meta = TRACK_META[id];
   const b = track.drop.balance;
   const med = track.income.median;
   const cons = track.income.conservative;
   const opt = track.income.optimistic;
+  const has457 = track.deferredComp.p50 > 0;
+  const savingsSpread = opt.monthlySavingsDraw - cons.monthlySavingsDraw >= 1;
+  const dropSpread = opt.monthlyDropDraw - cons.monthlyDropDraw >= 1;
+
   return (
     <section className={`track-card ${isPick ? 'pick' : ''}`}>
       <div className="track-head">
@@ -211,16 +215,33 @@ function TrackCard({ track, id, isPick, showReal }) {
       </div>
 
       <div className="track-metric">
-        <div className="track-metric-label">Total monthly income</div>
-        <div className="track-metric-big">{usd(med.totalMonthly)}<span className="scen-mo">/mo</span></div>
-        <div className="track-metric-range">
-          range {usd(cons.totalMonthly)} – {usd(opt.totalMonthly)}
-          {showReal && <> · ≈ {usd(med.totalMonthlyReal)}/mo in today's $</>}
-        </div>
+        <div className="track-metric-label">Guaranteed monthly income</div>
+        <div className="track-metric-big">{usd(med.totalMonthlyGuaranteed)}<span className="scen-mo">/mo</span></div>
         <div className="track-metric-note">
-          pension {usd(med.monthlyPension)} + 457(b) draw {usd(med.monthlySavingsDraw)}
-          {med.monthlySocialSecurity > 0 && <> + SS {usd(med.monthlySocialSecurity)}</>}
-          . Plus ~{usd(med.monthlyDropDraw)}/mo more if you also draw 4% on the DROP.
+          pension {usd(med.monthlyPension)}
+          {med.monthlySocialSecurity > 0 && <> + Social Security {usd(med.monthlySocialSecurity)}</>}
+        </div>
+      </div>
+
+      <div className="track-boosts">
+        {has457 && (
+          <>
+            <div className="track-boost-row">
+              <span>+ your 457(b) at {swrPct}%</span>
+              <span className="track-boost-plus">+{usd(med.monthlySavingsDraw)}/mo</span>
+            </div>
+            <div className="track-boost-total">
+              → {usd(med.totalMonthly)}/mo{savingsSpread && <> (range {usd(cons.totalMonthly)} – {usd(opt.totalMonthly)})</>}
+            </div>
+          </>
+        )}
+        <div className="track-boost-row">
+          <span>+ this DROP balance at {swrPct}%</span>
+          <span className="track-boost-plus">+{usd(med.monthlyDropDraw)}/mo</span>
+        </div>
+        <div className="track-boost-total">
+          → {usd(med.totalMonthlyWithDrop)}/mo{dropSpread && <> (range {usd(cons.totalMonthlyWithDrop)} – {usd(opt.totalMonthlyWithDrop)})</>}
+          {showReal && <> · ≈ {usd(med.totalMonthlyWithDropReal)}/mo in today's $</>}
         </div>
       </div>
 
@@ -234,6 +255,7 @@ function CompareView({ result, onEdit }) {
   const plan8 = tracks.plan8, self10 = tracks.self10;
   const pension = plan8.pension; // identical across tracks (frozen at entry)
   const showReal = plan8.yearsToRetirement >= 2;
+  const swrPct = Math.round(assumptions.safeWithdrawalRate * 1000) / 10;
 
   const bothQualify = plan8.publicSafetyPenaltyException && self10.publicSafetyPenaltyException;
   const eitherQualifies = plan8.publicSafetyPenaltyException || self10.publicSafetyPenaltyException;
@@ -260,8 +282,8 @@ function CompareView({ result, onEdit }) {
       )}
 
       <div className="track-grid">
-        <TrackCard track={plan8} id="plan8" isPick={dropTrackPick === 'plan8'} showReal={showReal} />
-        <TrackCard track={self10} id="self10" isPick={dropTrackPick === 'self10'} showReal={showReal} />
+        <TrackCard track={plan8} id="plan8" isPick={dropTrackPick === 'plan8'} showReal={showReal} swrPct={swrPct} />
+        <TrackCard track={self10} id="self10" isPick={dropTrackPick === 'self10'} showReal={showReal} swrPct={swrPct} />
       </div>
 
       <div className="drop-compare-note">

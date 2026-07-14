@@ -246,6 +246,14 @@ body.transparent { background: transparent; }
 .track-metric-big .scen-mo { font-size: 14px; font-weight: 500; color: var(--ink-2); }
 .track-metric-range { font-size: 12px; color: var(--ink-3); }
 .track-metric-note { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.track-boosts { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.track-boost-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 8px; font-size: 13px; font-weight: 600; margin-top: 10px;
+}
+.track-boost-row:first-child { margin-top: 0; }
+.track-boost-plus { color: var(--data); white-space: nowrap; }
+.track-boost-total { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
 .track-cap {
   margin-top: 12px; padding: 8px 10px; border-radius: 8px;
   background: #fdf6ec; border: 1px solid #e6cf9f; color: #7a5a1e; font-size: 12px;
