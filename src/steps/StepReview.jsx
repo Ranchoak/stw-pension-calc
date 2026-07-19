@@ -1,4 +1,4 @@
-import { MULTIPLIER_OPTIONS, FAS_OPTIONS, CONTRIB_FREQ } from '../lib/formDefaults.js';
+import { MULTIPLIER_OPTIONS, FAS_OPTIONS, CONTRIB_FREQ, BENEFIT_OPTIONS } from '../lib/formDefaults.js';
 import { ASSUMPTIONS } from '../lib/assumptions.js';
 
 const fmt$ = (v) => (v === '' || v == null ? '—' : '$' + Number(v).toLocaleString('en-US'));
@@ -8,6 +8,7 @@ export default function StepReview({ form }) {
     ? `${form.customMultiplier || '—'}% (custom)`
     : MULTIPLIER_OPTIONS.find((o) => o.value === form.multiplier)?.label;
   const fas = FAS_OPTIONS.find((o) => o.value === form.fasBasis)?.label;
+  const benefit = BENEFIT_OPTIONS.find((o) => o.value === form.benefitOption)?.label ?? '—';
   const freqLabel = (CONTRIB_FREQ[form.contribFreq] ?? CONTRIB_FREQ.annual).label.toLowerCase();
 
   const sepGiven = (form.retireBy === 'age' ? form.retireAge : form.targetYears) !== '';
@@ -23,6 +24,7 @@ export default function StepReview({ form }) {
     ['Age / years of service', `${form.age || '—'} yrs old · ${form.yearsOfService || '—'} yrs in`],
     ['Salary & raises', `${fmt$(form.salary)} / yr, +${form.raisePct || 0}%/yr`],
     ['Pension formula', `${mult} · ${fas}`],
+    ['Payment option', `${benefit} (× ${form.benefitFactor || '1'})`],
     ['Separation', sepLabel],
     ['DROP', dropLabel],
     ['Deferred comp', `${fmt$(form.savingsBalance)} now, ${fmt$(form.contribAmount)} ${freqLabel} going in`],

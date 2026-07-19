@@ -5,8 +5,25 @@
 //               self-directed tracks are shown side by side so the member can
 //               see "8 vs 10" — that comparison IS the point.
 
+import { BENEFIT_OPTIONS } from '../lib/formDefaults.js';
+
 const usd = (v) => '$' + Math.round(v).toLocaleString('en-US');
 const multPct = (m) => (m * 100).toFixed(3).replace(/\.?0+$/, '');
+const benefitLabel = (key) => BENEFIT_OPTIONS.find((o) => o.value === key)?.label ?? 'selected option';
+
+// The formula line under a pension figure. When a non-1.0 payment option is
+// elected, spell out the base amount and the factor so the adjustment is clear.
+function PensionFormula({ pension }) {
+  const base = (
+    <>{pension.serviceYears} yrs × {multPct(pension.multiplier)}% × {usd(pension.finalAverageSalary)} final average salary = {usd(pension.baseAnnual)}/yr</>
+  );
+  if (Math.abs(pension.benefitFactor - 1) < 1e-9) return <p>{base}</p>;
+  return (
+    <p>
+      {base}, × {pension.benefitFactor.toFixed(4)} for {benefitLabel(pension.benefitOption)} = <strong>{usd(pension.annual)}/yr</strong>
+    </p>
+  );
+}
 
 // Shared pre-tax / early-withdrawal-penalty disclosure. `qualifies` and the age
 // summary are computed by the caller (they differ between single and compare).
@@ -138,12 +155,9 @@ function SingleView({ result, onEdit }) {
 
       <div className="detail-grid">
         <section className="detail">
-          <h3>Pension</h3>
+          <h3>Pension{pension.benefitFactor !== 1 ? ` (${benefitLabel(pension.benefitOption)})` : ''}</h3>
           <div className="detail-big">{usd(pension.monthly)}<span>/mo</span></div>
-          <p>
-            {pension.serviceYears} yrs × {multPct(pension.multiplier)}% × {usd(pension.finalAverageSalary)} final
-            average salary = {usd(pension.annual)}/yr
-          </p>
+          <PensionFormula pension={pension} />
         </section>
 
         <section className="detail">
@@ -276,7 +290,7 @@ function CompareView({ result, onEdit }) {
       <h2>8-year plan vs 10-year self-directed</h2>
       <p className="step-intro">
         You enter DROP at age {dropEntryAge}. Your pension is frozen there either
-        way — {usd(pension.monthly)}/mo, {pension.serviceYears} yrs × {multPct(pension.multiplier)}% ×
+        way — {usd(pension.monthly)}/mo{pension.benefitFactor !== 1 ? ` (${benefitLabel(pension.benefitOption)})` : ''}, {pension.serviceYears} yrs × {multPct(pension.multiplier)}% ×
         {' '}{usd(pension.finalAverageSalary)}. What differs is how your DROP account
         grows and how long it runs. The self-directed figures use a {sdEquityPct}% stock
         allocation and are a range, never a promise.

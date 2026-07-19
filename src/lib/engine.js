@@ -152,6 +152,14 @@ export function parseForm(form) {
   }
   const fasYears = { high2: 2, high3: 3, high5: 5 }[form.fasBasis] ?? 3;
 
+  // Payment-option election factor scales the raw formula amount. Defaults to
+  // 1.0 (the plan's normal form) if not provided, so nothing changes for a
+  // form that predates this field.
+  const benefitOption = form.benefitOption ?? 'special60';
+  const benefitFactor = num(form.benefitFactor) ?? 1;
+  check(!Number.isNaN(benefitFactor) && benefitFactor >= 0.5 && benefitFactor <= 1.5,
+    'That benefit-option factor is outside the normal range (roughly 0.90–1.05) — enter the factor from your benefit estimate, e.g. 0.9767, not a percentage.');
+
   // Separation is optional. Blank (null) means "use each DROP track's natural
   // end" — only valid when a DROP track is chosen (below).
   const sepRaw = form.retireBy === 'age' ? form.retireAge : form.targetYears;
@@ -215,6 +223,7 @@ export function parseForm(form) {
 
   return {
     age, serviceYears, salary, raise, multiplier, fasYears,
+    benefitOption, benefitFactor,
     separationYears, dropTrack, entryIn, sdEquity,
     startBalance, annualContribution, socialSecurity,
     warnings,
@@ -274,12 +283,17 @@ export function calculate(form, overrides = {}) {
     currentSalary: i.salary, raise: i.raise, yearsUntilFreeze: freezeIn, fasYears: i.fasYears,
   });
   const serviceAtFreeze = i.serviceYears + freezeIn;
-  const pensionAnnual = annualPension({ serviceYears: serviceAtFreeze, multiplier: i.multiplier, fas });
+  // Raw formula amount (the plan's normal form), then scaled by the elected
+  // payment-option factor to get the actual benefit paid.
+  const pensionBaseAnnual = annualPension({ serviceYears: serviceAtFreeze, multiplier: i.multiplier, fas });
+  const pensionAnnual = pensionBaseAnnual * i.benefitFactor;
   const pensionMonthly = pensionAnnual / 12;
   const ssMonthly = i.socialSecurity ? i.socialSecurity.monthly : 0;
   const pension = {
     annual: pensionAnnual, monthly: pensionMonthly, finalAverageSalary: fas,
     serviceYears: serviceAtFreeze, multiplier: i.multiplier, frozenAtDropEntry: usingDrop,
+    baseAnnual: pensionBaseAnnual, baseMonthly: pensionBaseAnnual / 12,
+    benefitOption: i.benefitOption, benefitFactor: i.benefitFactor,
   };
   const draw = (balance) => (balance * A.safeWithdrawalRate) / 12;
 

@@ -1,7 +1,15 @@
 import { Field, NumberInput, Choice } from '../components/Field.jsx';
-import { MULTIPLIER_OPTIONS, FAS_OPTIONS } from '../lib/formDefaults.js';
+import { MULTIPLIER_OPTIONS, FAS_OPTIONS, BENEFIT_OPTIONS } from '../lib/formDefaults.js';
 
 export default function StepPension({ form, set }) {
+  // Picking an option fills in its default factor; the factor stays editable so
+  // a member can drop in the exact number from their own benefit estimate.
+  const pickBenefit = (value) => {
+    const opt = BENEFIT_OPTIONS.find((o) => o.value === value);
+    set('benefitOption', value);
+    if (opt) set('benefitFactor', String(opt.factor));
+  };
+
   return (
     <>
       <p className="step-intro">
@@ -28,6 +36,26 @@ export default function StepPension({ form, set }) {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
+        </Field>
+      </div>
+
+      <div className="subhead">How do you want it paid?</div>
+      <p className="field-hint" style={{ marginTop: 0 }}>
+        Your payment election scales the base pension: a survivor option trades
+        some monthly income for protecting a beneficiary. The factors here are
+        typical, but yours depend on your and your beneficiary's ages — if your
+        benefit estimate lists an exact factor, type it in.
+      </p>
+      <div className="grid">
+        <Field label="Payment option">
+          <select value={form.benefitOption} onChange={(e) => pickBenefit(e.target.value)}>
+            {BENEFIT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Option factor" hint="Multiplies your base pension. 1.0 = the plan's normal form.">
+          <NumberInput value={form.benefitFactor} onChange={(v) => set('benefitFactor', v)} min="0.5" max="1.5" step="0.0001" />
         </Field>
       </div>
 
