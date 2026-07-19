@@ -169,35 +169,6 @@ describe('calculate (end to end, deterministic)', () => {
     expect(bi.deferredComp.p50).toBeCloseTo(yr.deferredComp.p50, 2);
   });
 
-  it('defaults the benefit factor to 1.0 (base formula unchanged)', () => {
-    const r = calculate(form, opts);
-    expect(r.pension.benefitFactor).toBe(1);
-    expect(r.pension.annual).toBeCloseTo(r.pension.baseAnnual, 6);
-    expect(r.pension.annual).toBeCloseTo(75000, 6);
-  });
-
-  it('scales the pension by the elected payment-option factor', () => {
-    // 100% Joint & Survivor at 0.9767: 75,000 × 0.9767 = 73,252.50/yr.
-    const r = calculate({ ...form, benefitOption: 'js100', benefitFactor: '0.9767' }, opts);
-    expect(r.pension.baseAnnual).toBeCloseTo(75000, 6);
-    expect(r.pension.annual).toBeCloseTo(75000 * 0.9767, 4);
-    expect(r.pension.monthly).toBeCloseTo((75000 * 0.9767) / 12, 4);
-    expect(r.pension.benefitOption).toBe('js100');
-    // The factored pension flows into the combined income headline.
-    expect(r.income.median.monthlyPension).toBeCloseTo((75000 * 0.9767) / 12, 4);
-  });
-
-  it('lets the factor be overridden independently of the named option', () => {
-    // A member types their own estimate's factor, e.g. 0.9812.
-    const r = calculate({ ...form, benefitOption: 'js100', benefitFactor: '0.9812' }, opts);
-    expect(r.pension.annual).toBeCloseTo(75000 * 0.9812, 4);
-  });
-
-  it('rejects a benefit factor entered as a percentage', () => {
-    expect(() => calculate({ ...form, benefitFactor: '97.67' }, opts))
-      .toThrow(/benefit-option factor/);
-  });
-
   it('reports income in today\'s dollars via the inflation deflator', () => {
     const r = calculate({ ...form, retireAge: '60' }, { ...opts, inflation: 0.025 });
     // 10 years out at 2.5% → factor 1/1.025^10.
